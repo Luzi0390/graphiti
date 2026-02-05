@@ -70,6 +70,16 @@ try:
     HAS_GROQ = True
 except ImportError:
     HAS_GROQ = False
+
+# Try to import cross encoder clients
+try:
+    from graphiti_core.cross_encoder.gemini_reranker_client import GeminiRerankerClient
+
+    HAS_GEMINI_RERANKER = True
+except ImportError:
+    HAS_GEMINI_RERANKER = False
+
+from graphiti_core.cross_encoder import CrossEncoderClient
 from utils.utils import create_azure_credential_token_provider
 
 
@@ -435,3 +445,52 @@ class DatabaseDriverFactory:
 
             case _:
                 raise ValueError(f'Unsupported Database provider: {provider}')
+
+
+class CrossEncoderFactory:
+    """Factory for creating Cross Encoder (reranker) clients based on configuration."""
+
+    @staticmethod
+    def create(config: LLMConfig) -> CrossEncoderClient | None:
+        """Create a Cross Encoder client based on the LLM provider.
+
+        Uses the same provider as the LLM client to ensure consistency.
+        Returns None if no appropriate cross encoder is available for the provider.
+        """
+        import logging
+
+        logger = logging.getLogger(__name__)
+
+        provider = config.provider.lower()
+
+        match provider:
+            case 'gemini':
+                if not HAS_GEMINI_RERANKER:
+                    logger.warning(
+                        'Gemini reranker not available in current graphiti-core version'
+                    )
+                    return None
+                if not config.providers.gemini:
+                    logger.warning('Gemini provider configuration not found for reranker')
+                    return None
+
+                api_key = config.providers.gemini.api_key
+                if not api_key:
+                    logger.warning('Gemini API key not configured for reranker')
+                    return None
+
+                logger.info('Creating Gemini Reranker client')
+
+                from graphiti_core.llm_client.config import LLMConfig as CoreLLMConfig
+
+                reranker_config = CoreLLMConfig(
+                    api_key=api_key,
+                    model='gemini-2.0-flash',  # Use a fast model for reranking
+                )
+                return GeminiRerankerClient(config=reranker_config)
+
+            case _:
+                # For other providers, return None to use default OpenAI reranker
+                # (requires OPENAI_API_KEY to be set)
+                logger.info(f'No specific reranker for {provider}, will use default')
+                return None

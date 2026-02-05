@@ -1,0 +1,80 @@
+# syntax=docker/dockerfile:1
+# Graphiti MCP Server with Gemini Support
+# This image includes google-genai for Gemini LLM and embedding support
+
+FROM docker.io/library/python:3.11-slim-bookworm
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install uv for Python package management
+ADD https://astral.sh/uv/install.sh /uv-installer.sh
+RUN sh /uv-installer.sh && rm /uv-installer.sh
+
+# Add uv to PATH
+ENV PATH="/root/.local/bin:${PATH}"
+
+# Configure uv for optimal Docker usage
+ENV UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy \
+    UV_PYTHON_DOWNLOADS=never \
+    MCP_SERVER_HOST="0.0.0.0" \
+    PYTHONUNBUFFERED=1
+
+# Set up MCP server directory
+WORKDIR /app/mcp
+
+# Accept graphiti-core version as build argument
+ARG GRAPHITI_CORE_VERSION=0.26.3
+
+# Copy project files for dependency installation
+COPY pyproject.toml uv.lock ./
+
+# Remove the local path override for graphiti-core in Docker builds
+# Install with neo4j, falkordb, AND google-genai extras for Gemini support
+RUN sed -i '/\[tool\.uv\.sources\]/,/graphiti-core/d' pyproject.toml && \
+    sed -i "s/graphiti-core\[falkordb\]==[0-9]\+\.[0-9]\+\.[0-9]\+$/graphiti-core[neo4j,falkordb,google-genai]==${GRAPHITI_CORE_VERSION}/" pyproject.toml && \
+    echo "Regenerating lock file for PyPI graphiti-core with Gemini support..." && \
+    rm -f uv.lock && \
+    uv lock
+
+# Install Python dependencies with providers extra (includes google-genai)
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --no-group dev --extra providers
+
+# Store graphiti-core version
+RUN echo "${GRAPHITI_CORE_VERSION}" > /app/mcp/.graphiti-core-version
+
+# Copy MCP server application code
+COPY main.py ./
+COPY src/ ./src/
+COPY config/ ./config/
+
+# Create log directory
+RUN mkdir -p /var/log/graphiti
+
+# Add Docker labels with version information
+ARG MCP_SERVER_VERSION=1.0.1
+ARG BUILD_DATE
+ARG VCS_REF
+LABEL org.opencontainers.image.title="Graphiti MCP Server (Gemini)" \
+      org.opencontainers.image.description="Graphiti MCP server with Gemini LLM and embedding support" \
+      org.opencontainers.image.version="${MCP_SERVER_VERSION}" \
+      org.opencontainers.image.created="${BUILD_DATE}" \
+      org.opencontainers.image.revision="${VCS_REF}" \
+      org.opencontainers.image.vendor="Zep AI" \
+      org.opencontainers.image.source="https://github.com/zep-ai/graphiti" \
+      graphiti.core.version="${GRAPHITI_CORE_VERSION}"
+
+# Expose MCP server port
+EXPOSE 8000
+
+# Health check - verify MCP server is responding
+HEALTHCHECK --interval=10s --timeout=5s --start-period=60s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
+
+# Run the MCP server
+CMD ["uv", "run", "--no-sync", "main.py"]

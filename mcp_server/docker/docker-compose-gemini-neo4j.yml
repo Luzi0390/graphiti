@@ -1,0 +1,62 @@
+# Graphiti MCP Server with Gemini + Neo4j
+# Port mapping: 18000 (host) -> 8000 (container)
+
+services:
+  neo4j:
+    image: docker.io/library/neo4j:5.26.0
+    ports:
+      - "7474:7474" # HTTP Browser
+      - "7687:7687" # Bolt
+    environment:
+      - NEO4J_AUTH=${NEO4J_USER:-neo4j}/${NEO4J_PASSWORD:-graphiti_secure_2024}
+      - NEO4J_server_memory_heap_initial__size=512m
+      - NEO4J_server_memory_heap_max__size=1G
+      - NEO4J_server_memory_pagecache_size=512m
+    volumes:
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+    healthcheck:
+      test: ["CMD", "wget", "-O", "/dev/null", "http://localhost:7474"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  graphiti-mcp:
+    image: graphiti-mcp-gemini:latest
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.gemini
+    env_file:
+      - ../.env
+    depends_on:
+      neo4j:
+        condition: service_healthy
+    environment:
+      # Google Gemini Configuration
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      # Database configuration
+      - NEO4J_URI=${NEO4J_URI:-bolt://neo4j:7687}
+      - NEO4J_USER=${NEO4J_USER:-neo4j}
+      - NEO4J_PASSWORD=${NEO4J_PASSWORD:-graphiti_secure_2024}
+      - NEO4J_DATABASE=${NEO4J_DATABASE:-neo4j}
+      # Application configuration
+      - GRAPHITI_GROUP_ID=${GRAPHITI_GROUP_ID:-main}
+      - SEMAPHORE_LIMIT=${SEMAPHORE_LIMIT:-10}
+      - CONFIG_PATH=/app/mcp/config/config.yaml
+      - PATH=/root/.local/bin:${PATH}
+    volumes:
+      - ../config/config-gemini-neo4j.yaml:/app/mcp/config/config.yaml:ro
+    ports:
+      - "18000:8000" # MCP server HTTP (host:18000 -> container:8000)
+    command: ["uv", "run", "main.py"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+volumes:
+  neo4j_data:
+  neo4j_logs:
