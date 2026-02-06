@@ -1,5 +1,5 @@
 # Graphiti MCP Server with Gemini + Neo4j
-# Port mapping: 18000 (host) -> 8000 (container)
+# Port mapping: 8000 (host) -> 8000 (container)
 
 services:
   neo4j:
@@ -44,11 +44,11 @@ services:
       - GRAPHITI_GROUP_ID=${GRAPHITI_GROUP_ID:-main}
       - SEMAPHORE_LIMIT=${SEMAPHORE_LIMIT:-10}
       - CONFIG_PATH=/app/mcp/config/config.yaml
-      - PATH=/root/.local/bin:${PATH}
+      - PATH=/usr/local/bin:${PATH}
     volumes:
       - ../config/config-gemini-neo4j.yaml:/app/mcp/config/config.yaml:ro
     ports:
-      - "18000:8000" # MCP server HTTP (host:18000 -> container:8000)
+      - "8000:8000" # MCP server HTTP (host:8000 -> container:8000)
     command: ["uv", "run", "main.py"]
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]

@@ -225,7 +225,7 @@ If ports 6379, 3000, or 8000 are already in use, modify the port mappings in `do
 ports:
   - "16379:6379"  # Use different external port
   - "13000:3000"
-  - "18000:8000"
+  - "8000:8000"
 ```
 
 ## Production Considerations

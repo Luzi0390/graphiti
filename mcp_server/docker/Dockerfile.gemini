@@ -11,16 +11,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Install uv for Python package management
-ADD https://astral.sh/uv/install.sh /uv-installer.sh
-RUN sh /uv-installer.sh && rm /uv-installer.sh
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
 
 # Add uv to PATH
-ENV PATH="/root/.local/bin:${PATH}"
+ENV PATH="/usr/local/bin:${PATH}"
 
 # Configure uv for optimal Docker usage
 ENV UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
     UV_PYTHON_DOWNLOADS=never \
+    UV_PIP_INDEX_URL=https://pypi.org/simple \
+    UV_PIP_EXTRA_INDEX_URL=https://download.pytorch.org/whl/cpu \
     MCP_SERVER_HOST="0.0.0.0" \
     PYTHONUNBUFFERED=1
 
@@ -41,9 +42,13 @@ RUN sed -i '/\[tool\.uv\.sources\]/,/graphiti-core/d' pyproject.toml && \
     rm -f uv.lock && \
     uv lock
 
-# Install Python dependencies with providers extra (includes google-genai)
+# Install Python dependencies
+# We explicitly avoid the 'providers' extra because it contains sentence-transformers
+# which pulls in several gigabytes of CUDA and torch libraries.
+# Instead, we install only what's needed for Gemini.
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --no-group dev --extra providers
+    uv sync --no-group dev && \
+    uv pip install "google-genai>=1.8.0" "graphiti-core[neo4j,google-genai]==${GRAPHITI_CORE_VERSION}"
 
 # Store graphiti-core version
 RUN echo "${GRAPHITI_CORE_VERSION}" > /app/mcp/.graphiti-core-version

@@ -341,7 +341,7 @@ class EmbedderFactory:
 
                 gemini_config = GeminiEmbedderConfig(
                     api_key=api_key,
-                    embedding_model=config.model or 'models/text-embedding-004',
+                    embedding_model=config.model or 'gemini-embedding-001',
                     embedding_dim=config.dimensions or 768,
                 )
                 return GeminiEmbedder(config=gemini_config)

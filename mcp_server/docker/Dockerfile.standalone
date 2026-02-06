@@ -11,11 +11,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Install uv for Python package management
-ADD https://astral.sh/uv/install.sh /uv-installer.sh
-RUN sh /uv-installer.sh && rm /uv-installer.sh
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
 
 # Add uv to PATH
-ENV PATH="/root/.local/bin:${PATH}"
+ENV PATH="/usr/local/bin:${PATH}"
 
 # Configure uv for optimal Docker usage
 ENV UV_COMPILE_BYTECODE=1 \
